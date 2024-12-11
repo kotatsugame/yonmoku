@@ -195,15 +195,15 @@ struct Board
 	unsigned long long valid_move() const
 	{
 		/*
-		unsigned long long ret = 0uLL;
-		for(int x=0;x<SIZE;x++)for(int y=0;y<SIZE;y++)
-		{
-			int z=0;
-			while(z<4 && get_cell(x, y, z) != Cell::None) z++;
-			if(z<4) ret |= 1uLL << IDX(x, y, z);
-		}
-		assert(ret == (((Me | You) << SIZE * SIZE | ((1uLL << SIZE * SIZE) - 1)) & ~(Me | You)));
-		*/
+		   unsigned long long ret = 0uLL;
+		   for(int x=0;x<SIZE;x++)for(int y=0;y<SIZE;y++)
+		   {
+		   int z=0;
+		   while(z<4 && get_cell(x, y, z) != Cell::None) z++;
+		   if(z<4) ret |= 1uLL << IDX(x, y, z);
+		   }
+		   assert(ret == (((Me | You) << SIZE * SIZE | ((1uLL << SIZE * SIZE) - 1)) & ~(Me | You)));
+		   */
 		return ((Me | You) << SIZE * SIZE | ((1uLL << SIZE * SIZE) - 1)) & ~(Me | You);
 	}
 };
@@ -234,13 +234,13 @@ struct HumanPlayer : Player
 
 struct Game
 {
-    Board board;
-    Player* player1;
-    Player* player2;
+	Board board;
+	Player* player1;
+	Player* player2;
 	vector<pair<int, int> > hand, start;
 	bool verbose;
 
-    Game(Player* p1, Player* p2, bool verbose=false, vector<pair<int, int> > start = {}) : player1(p1), player2(p2), verbose(verbose), start(start)
+	Game(Player* p1, Player* p2, bool verbose=false, vector<pair<int, int> > start = {}) : player1(p1), player2(p2), verbose(verbose), start(start)
 	{
 		p1 -> set_verbose(verbose);
 		p2 -> set_verbose(verbose);
@@ -371,7 +371,7 @@ struct AIPlayer : Player
 	F evaluate_func;
 	AIPlayer(int level, F evaluate_func) : level(level), evaluate_func(evaluate_func) {}
 
-    pair<int, int> move(Board board) override
+	pair<int, int> move(Board board) override
 	{
 		unsigned long long hand = board.valid_move();
 		assert(hand);
@@ -632,11 +632,11 @@ int main()
 	return ev;
 };
 */
-	//AIPlayer AI(8,evaluate_bonus_cont);
-	//HumanPlayer H;
-	//Game game(&H, &AI, true, true);
-	//game.game();
-	//return 0;
+//AIPlayer AI(8,evaluate_bonus_cont);
+//HumanPlayer H;
+//Game game(&H, &AI, true, true);
+//game.game();
+//return 0;
 	AIPlayer p1(7, evaluate);
 	AIPlayer p2(7, evaluate);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});

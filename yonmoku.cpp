@@ -1,0 +1,577 @@
+#include<iostream>
+#include<vector>
+#include<array>
+#include<algorithm>
+#include<cassert>
+#include<random>
+#include<set>
+#include<map>
+#include<chrono>
+
+using namespace std;
+
+mt19937 rng(random_device{}());
+enum Cell{None, Me, You};
+enum State{Continue, End, Invalid};
+enum Color{Draw, Black, White};
+
+const int SIZE = 4;
+#define IDX(x, y, z) ((x) + (y) * SIZE + (z) * SIZE * SIZE)
+#define X(idx) ((idx) % SIZE)
+#define Y(idx) ((idx) / SIZE % SIZE)
+#define Z(idx) ((idx) / SIZE / SIZE)
+const int BOARD_SIZE = SIZE * SIZE * SIZE;
+const int INF = 1e3;
+const int LINES_NUM = 76;
+
+array<unsigned long long, LINES_NUM> LINES;
+
+struct Board
+{
+	unsigned long long Me,You;
+	Board():Me(0uLL),You(0uLL){}
+
+	inline enum Cell get_cell(int x,int y,int z) const
+	{
+		int idx = IDX(x, y, z);
+		if(Me >> idx & 1uLL)
+		{
+			assert(!(You >> idx & 1uLL));
+			return Cell::Me;
+		}
+		else if(You >> idx & 1uLL) return Cell::You;
+		else return Cell::None;
+	}
+
+	int turn() const
+	{
+		return __builtin_popcountll(Me | You) + 1;
+	}
+
+	enum Color validate() const
+	{
+		assert(!(Me & You));
+		const int d= __builtin_popcountll(Me) - __builtin_popcountll(You);
+		assert(d == 0 || d == -1);
+		return d == 0 ? Color::Black : Color::White;
+	}
+
+	void print()
+	{
+		enum Color now = validate();
+		unsigned long long black, white;
+		if (now == Color::Black) black = Me, white = You;
+		else black = You, white = Me;
+		cout << "    z=1  z=2  z=3  z=4\n";
+		for (int y = SIZE - 1; y >= 0; y--)
+		{
+			cout << "y=" << y + 1 << " ";
+			for (int z = 0; z < SIZE; z++)
+			{
+				for (int x = 0; x < SIZE; x++)
+				{
+					const int idx = IDX(x, y, z);
+					if (black >> idx & 1uLL) cout << "\033[31mX\033[m";
+					else if (white >> idx & 1uLL) cout << "O";
+					else cout << "-";
+				}
+				if (z + 1 < SIZE) cout << " ";
+			}
+			cout << "\n";
+		}
+		cout << "  x=1234 1234 1234 1234" << endl;
+	}
+
+	array<int, LINES_NUM> count() const
+	{
+		array<int, LINES_NUM> ret;
+		for (int i = 0; i < LINES_NUM; i++)
+		{
+			if ((Me & LINES[i]) and (You & LINES[i])) ret[i] = 0;
+			else if (Me & LINES[i]) ret[i] = __builtin_popcountll(Me & LINES[i]);
+			else ret[i] = -__builtin_popcountll(You & LINES[i]);
+		}
+		return ret;
+	}
+
+	enum State win() const
+	{//can be more speed up
+		for (const unsigned long long L: LINES)
+		{
+			if ((You & L) == L)return State::End;
+		}
+		return State::Continue;
+	}
+
+	enum State place(int x, int y)
+	{
+		if(x<0||4<=x||y<0||4<=y)
+		{
+			cout<<"out of range : ("<<x+1<<", "<<y+1<<")"<<endl;
+			return State::Invalid;
+		}
+		int z=0;
+		while(z<4 && get_cell(x, y, z) != Cell::None) z++;
+		if(z==4)
+		{
+			cout<<"row ("<<x+1<<", "<<y+1<<") is full"<<endl;
+			return State::Invalid;
+		}
+		Me |= 1uLL << IDX(x, y, z);
+		swap(Me, You);
+		return win();
+	}
+
+	enum State place_fast(unsigned long long xyz)
+	{
+		Me |= 1uLL << xyz;
+		swap(Me, You);
+		return win();
+	}
+
+	unsigned long long valid_move() const
+	{
+		unsigned long long ret = 0uLL;
+		for(int x=0;x<SIZE;x++)for(int y=0;y<SIZE;y++)
+		{
+			int z=0;
+			while(z<4 && get_cell(x, y, z) != Cell::None) z++;
+			if(z<4) ret |= 1uLL << IDX(x, y, z);
+		}
+		return ret;
+	}
+};
+
+struct Player
+{
+	virtual pair<int,int> move(Board board) = 0;
+};
+
+struct HumanPlayer : Player
+{
+	pair<int,int> move(Board board) override
+	{
+		enum Color now = board.validate();
+		cout<<endl;
+		board.print();
+		cout << "Input x y: place ";
+		if (now == Color::Black) cout << "\033[31mX\033[m";
+		else cout << "O";
+		cout << " to (x, y)\t(1 <= x, y <= 4)"<<endl;
+		int x, y;
+		cin >> x >> y;
+		return make_pair(x - 1, y - 1);
+	}
+};
+
+struct Game
+{
+    Board board;
+    Player* player1;
+    Player* player2;
+	vector<pair<int,int> >hand;
+	bool verbose, start;
+
+    Game(Player* p1, Player* p2, bool verbose=false, bool start=false) : player1(p1), player2(p2), verbose(verbose), start(start) {}
+
+	enum State move(int turn)
+	{
+		enum State ret;
+		while(true)
+		{
+			auto st=chrono::system_clock::now();
+			int x,y;
+			if(start&&turn<4)
+			{
+				static const int SX[4]={0,3,0,3};
+				static const int SY[4]={0,3,3,0};
+				x=SX[turn];
+				y=SY[turn];
+			}
+			else
+			{
+				Player* current_player = (turn % 2 == 0) ? player1 : player2;
+				auto p = current_player->move(board);
+				x=p.first; y=p.second;
+			}
+			ret = board.place(x,y);
+			if (ret == State::Invalid)
+			{
+				cout<<"Invalid move : ("<<x+1<<", "<<y+1<<")"<<endl;
+				continue;
+			}
+			hand.emplace_back(x+1, y+1);
+			if(verbose)
+			{
+				auto msec=chrono::duration_cast<std::chrono::milliseconds>(chrono::system_clock::now() - st);
+				cout << "[turn " << turn + 1 << "] Place to (" << x + 1 << ", " << y + 1 << ") ";
+				if (turn % 2 == 0) cout << "\033[31m(Black)\033[m";
+				else cout << "(White)";
+				cout << " by " << msec.count() / 1e3 << " sec" << endl;
+				board.print();
+			}
+			break;
+		}
+		return ret;
+	}
+
+	enum Color game()
+	{
+		enum State ret;
+		for(int turn=0;turn<BOARD_SIZE;turn++)
+		{
+			ret=move(turn);
+			if(ret == State::End)break;
+		}
+		board.print();
+		enum Color result;
+		if(ret == State::End)
+		{
+			cout << "END : winner is ";
+			if (board.validate() == Color::White)
+			{
+				result = Color::Black;
+				cout << "\033[31mBlack\033[m";
+			}
+			else
+			{
+				result = Color::White;
+				cout << "White";
+			}
+			cout << " by " << hand.size() << " moves" << endl;
+		}
+		else
+		{
+			result = Color::Draw;
+			cout << "DRAW" << endl;
+		}
+		cout<<"hands :";
+		for(auto[x,y]:hand)cout<<" ("<<x<<", "<<y<<"),";
+		cout<<endl;
+		return result;
+	}
+};
+
+
+template<typename F>
+pair<unsigned long long,double>read_DFS(Board board,int level,F evaluate_func)
+{
+	pair<unsigned long long, double> mv;
+	mv.first = 0uLL;
+
+	if(level==0)
+	{
+		mv.second=evaluate_func(board);
+		return mv;
+	}
+
+	assert(level>=1);
+	unsigned long long hand = board.valid_move();
+	if (!hand)
+	{
+		mv.second=0;
+		return mv;
+	}
+
+	mv.second=-INF;
+	for (int xyz = 0; xyz < BOARD_SIZE; xyz++) if (hand >> xyz & 1uLL)
+	{
+		Board b=board;
+		enum State r=b.place_fast(xyz);
+		assert(r != State::Invalid);
+		double ev;
+		if (r == State::End) ev = INF;
+		else
+		{
+			ev = -read_DFS(b, level-1, evaluate_func).second;
+			if (ev > INF/10) ev = ev - 1;
+			else if (ev < -INF/10) ev = ev + 1;
+		}
+		if(mv.second<ev)
+		{
+			mv.first = 0uLL;
+			mv.second = ev;
+		}
+		if(mv.second==ev) mv.first |= 1uLL << xyz;
+	}
+	assert(mv.first);
+	return mv;
+}
+
+template<typename F>
+struct AIPlayer:Player
+{
+	int level;
+	F evaluate_func;
+	AIPlayer(int level,F evaluate_func):level(level),evaluate_func(evaluate_func){}
+
+    pair<int,int> move(Board board) override
+	{
+		unsigned long long hand = board.valid_move();
+		assert(hand);
+
+		auto ret=board.count();
+		for(const int v:ret)assert(abs(v)<4);
+		for(int i=0;i<ret.size();i++)if(ret[i]==3)
+		{
+			if(hand & LINES[i])
+			{
+				int v = 0;
+				while (!((hand & LINES[i]) >> v & 1)) v++;
+				return make_pair(X(v), Y(v));
+			}
+		}
+		for(int i=0;i<ret.size();i++)if(ret[i]==-3)
+		{
+			if(hand & LINES[i])
+			{
+				int v = 0;
+				while (!((hand & LINES[i]) >> v & 1)) v++;
+				return make_pair(X(v), Y(v));
+			}
+		}
+
+		const int turn = board.turn();// turn number (the number of stones = turn - 1)
+		auto[mv, ev] = read_DFS(board, turn >= 40 ? 10 : level, evaluate_func);
+		enum Color now = board.validate();
+		if (now == Color::Black) cout<<"\033[31mscore = "<<ev<<" by";
+		else cout<<"score = "<<ev<<" by";
+		for (int xyz = 0; xyz < BOARD_SIZE; xyz++) if (mv >> xyz & 1uLL)
+		{
+			cout<<" ("<<X(xyz)+1<<", "<<Y(xyz)+1<<", "<<Z(xyz)+1<<"),";
+		}
+		if (now == Color::Black) cout<<"\033[m";
+		cout<<endl;
+		assert(mv);
+		vector<pair<int,int> >XY;
+		for (int xyz = 0; xyz < BOARD_SIZE; xyz++) if (mv >> xyz & 1uLL) XY.emplace_back(X(xyz), Y(xyz));
+		return XY[rng()%XY.size()];
+	}
+};
+
+int main()
+{
+	{
+		vector<unsigned long long>lines;
+		for (int x = 0; x < SIZE; ++x) {
+			for (int y = 0; y < SIZE; ++y) {
+				unsigned long long line = 0;
+				for (int z = 0; z < SIZE; ++z) {
+					line |= 1uLL << IDX(x, y, z);
+				}
+				lines.push_back(line);
+			}
+		}
+		for (int y = 0; y < SIZE; ++y) {
+			for (int z = 0; z < SIZE; ++z) {
+				unsigned long long line = 0;
+				for (int x = 0; x < SIZE; ++x) {
+					line |= 1uLL << IDX(x, y, z);
+				}
+				lines.push_back(line);
+			}
+		}
+		for (int z = 0; z < SIZE; ++z) {
+			for (int x = 0; x < SIZE; ++x) {
+				unsigned long long line = 0;
+				for (int y = 0; y < SIZE; ++y) {
+					line |= 1uLL << IDX(x, y, z);
+				}
+				lines.push_back(line);
+			}
+		}
+
+		for (int x = 0; x < SIZE; ++x) {
+			unsigned long long line1 = 0, line2 = 0;
+			for (int yz = 0; yz < SIZE; ++yz) {
+				line1 |= 1uLL << IDX(x, yz, yz);
+				line2 |= 1uLL << IDX(x, yz, SIZE - 1 - yz);
+			}
+			lines.push_back(line1);
+			lines.push_back(line2);
+		}
+		for (int y = 0; y < SIZE; ++y) {
+			unsigned long long line1 = 0, line2 = 0;
+			for (int zx = 0; zx < SIZE; ++zx) {
+				line1 |= 1uLL << IDX(zx, y, zx);
+				line2 |= 1uLL << IDX(zx, y, SIZE - 1 - zx);
+			}
+			lines.push_back(line1);
+			lines.push_back(line2);
+		}
+		for (int z = 0; z < SIZE; ++z) {
+			unsigned long long line1 = 0, line2 = 0;
+			for (int xy = 0; xy < SIZE; ++xy) {
+				line1 |= 1uLL << IDX(xy, xy, z);
+				line2 |= 1uLL << IDX(xy, SIZE - 1 - xy, z);
+			}
+			lines.push_back(line1);
+			lines.push_back(line2);
+		}
+
+		{
+			unsigned long long line1 = 0, line2 = 0, line3 = 0, line4 = 0;
+			for (int xyz = 0; xyz < SIZE; ++xyz) {
+				line1 |= 1uLL << IDX(xyz, xyz, xyz);
+				line2 |= 1uLL << IDX(xyz, xyz, SIZE - 1 - xyz);
+				line3 |= 1uLL << IDX(xyz, SIZE - 1 - xyz, xyz);
+				line4 |= 1uLL << IDX(xyz, SIZE - 1 - xyz, SIZE - 1 - xyz);
+			}
+			lines.push_back(line1);
+			lines.push_back(line2);
+			lines.push_back(line3);
+			lines.push_back(line4);
+		}
+
+		assert(lines.size()==LINES_NUM);
+		for(int j=0;j<LINES_NUM;j++)
+		{
+			LINES[j] = lines[j];
+			assert(__builtin_popcountll(LINES[j]) == 4);
+		}
+	}
+
+	auto evaluate=[](const Board&board)->double
+	{
+		int sum=0;
+		for(int v:board.count())sum+=v;
+		return (double)sum;
+	};
+	/*
+	   auto evaluate_bonus=[](const Board&board,const array<int,76>&ret)->double
+	   {
+	   double ev=0;
+	   for(int i=0;i<76;i++)
+	   {
+	   int c=ret[i];
+	   if(c==0)continue;
+	   int t=abs(c);
+	   if(t==3)
+	   {
+	   bool fn=false;
+	   for(int xyz:LINES[i])
+	   {
+	   if(xyz>=16&&board.board[xyz-16]==0)
+	   {
+	   fn=true;
+	   break;
+	   }
+	   }
+	   if(fn)t+=2;
+	   }
+	   ev+=c>0?t:-t;
+	   }
+	   return ev;
+	   };
+	   auto evaluate_bonus_cont=[](const Board&board,const array<int,76>&ret)->double
+	   {
+	   double ev=0;
+	   map<pair<int,int>,vector<int> >win,lose;
+	   for(int i=0;i<76;i++)
+	   {
+	   int c=ret[i];
+	   if(c==0)continue;
+	   int t=abs(c);
+	   if(t==3)
+	   {
+	   bool fn=false;
+	   int emp=INF;
+	   for(int xyz:LINES[i])
+	   {
+	   if(xyz>=16&&board.board[xyz-16]==0)fn=true;
+	   if(board.board[xyz]==0)
+	   {
+	   assert(emp==INF);
+	   emp=xyz;
+	   }
+	   }
+	   if(fn)t+=2;
+	   assert(emp!=INF);
+	   int x=emp%4,y=emp/4%4,z=emp/16;
+	   if(c>0)win[make_pair(x,y)].push_back(z);
+	   else lose[make_pair(x,y)].push_back(z);
+	   }
+	   ev+=c>0?t:-t;
+	   }
+	   for(auto&&[_,zv]:win)
+	   {
+	   for(int i=1;i<zv.size();i++)if(abs(zv[i-1]-zv[i])==1)ev+=100;
+	   }
+	   for(auto&&[_,zv]:lose)
+	   {
+	   for(int i=1;i<zv.size();i++)if(abs(zv[i-1]-zv[i])==1)ev-=100;
+	   }
+	   return ev;
+	   };
+
+	   auto evaluate_bonus_div10=[](const Board&board,const array<int,76>&ret)->double
+	   {
+	   double ev=0;
+	   for(int i=0;i<76;i++)
+	{
+		int c=ret[i];
+		if(c==0)continue;
+		int t=abs(c);
+		if(t==3)
+		{
+			bool fn=false;
+			for(int xyz:LINES[i])
+			{
+				if(xyz>=16&&board.board[xyz-16]==0)
+				{
+					fn=true;
+					break;
+				}
+			}
+			if(fn)t+=2;
+		}
+		double s=c>0?t:-t;
+		{
+			bool fn=false;
+			for(int j=1;j<4;j++)if(LINES[i][j-1]%16!=LINES[i][j]%16)
+			{
+				fn=true;
+				break;
+			}
+			if(!fn)s/=10;
+			else
+			{
+				bool all=true;
+				for(int xyz:LINES[i])if(xyz<3*16)
+				{
+					all=false;
+					break;
+				}
+				if(all)s/=10;
+			}
+		}
+		ev+=s;
+	}
+	return ev;
+};
+*/
+	//AIPlayer AI(8,evaluate_bonus_cont);
+	//HumanPlayer H;
+	//Game game(&H, &AI, true, true);
+	//game.game();
+	//return 0;
+	AIPlayer p1(6,evaluate);
+	AIPlayer p2(6,evaluate);
+	Game game(&p1, &p2, true, true);
+	game.game();
+	return 0;
+	/*
+	   int cnt[3]={};
+	   for(int t=1;;t++)
+	   {
+	   cout<<"Game #"<<t<<endl;
+	   Game game(&p1, &p2,false,true);
+	   int r=game.game();
+	   cnt[r+1]++;
+	   cout<<"Black : "<<cnt[2]<<endl;
+	   cout<<"White : "<<cnt[0]<<endl;
+	   cout<<" Draw : "<<cnt[1]<<endl;
+	   }
+	 */
+	return 0;
+}

@@ -33,7 +33,7 @@ struct Board
 	unsigned long long Me, You;
 	Board() : Me(0uLL), You(0uLL) {}
 
-	static inline enum State win(unsigned long long B)
+	static inline enum State win(const unsigned long long B)
 	{
 		{//z dir
 			unsigned long long b = B & B >> 2 * SIZE * SIZE;
@@ -107,6 +107,62 @@ struct Board
 		return State::Continue;
 	}
 
+	static inline unsigned long long reach(const unsigned long long B)
+	{
+		unsigned long long ret = 0uLL;
+		{//z dir
+			const unsigned long long b = B & B >> SIZE * SIZE;
+			ret |= B << SIZE * SIZE & b << 3 * SIZE * SIZE;
+			ret |= B >> SIZE * SIZE & b << 2 * SIZE * SIZE;
+			ret |= b >> SIZE * SIZE & B << SIZE * SIZE;
+			ret |= b >> 2 * SIZE * SIZE & B >> SIZE * SIZE;
+		}
+		{//x dir
+			const unsigned long long b = B & B >> 1;
+			{
+				static const unsigned long long mask = 0x1111111111111111uLL;
+				ret |= mask & B >> 1 & b >> 2;
+			}
+			{
+				static const unsigned long long mask = 0x2222222222222222uLL;
+				ret |= mask & B << 1 & b >> 1;
+			}
+			{
+				static const unsigned long long mask = 0x4444444444444444uLL;
+				ret |= mask & b << 2 & B >> 1;
+			}
+			{
+				static const unsigned long long mask = 0x8888888888888888uLL;
+				ret |= mask & b << 3 & B << 1;
+			}
+		}
+		{//y dir
+			const unsigned long long b = B & B >> SIZE;
+			{
+				static const unsigned long long mask = 0x000f000f000f000fuLL;
+				ret |= mask & B >> SIZE & b >> 2 * SIZE;
+			}
+			{
+				static const unsigned long long mask = 0x00f000f000f000f0uLL;
+				ret |= mask & B << SIZE & b >> SIZE;
+			}
+			{
+				static const unsigned long long mask = 0x0f000f000f000f00uLL;
+				ret |= mask & b << 2 * SIZE & B >> SIZE;
+			}
+			{
+				static const unsigned long long mask = 0xf000f000f000f000uLL;
+				ret |= mask & b << 3 * SIZE & B << SIZE;
+			}
+		}
+		for (int i = SIZE * SIZE * 3; i < LINES_NUM; i++)
+		{
+			const unsigned long long b = LINES[i] & ~B;
+			if ((b & -b) == b) ret |= b;
+		}
+		return ret;
+	}
+
 	inline enum Cell get_cell(int x, int y, int z) const
 	{
 		unsigned long long bit = BIT(x, y, z);
@@ -128,7 +184,7 @@ struct Board
 		return d == 0 ? Color::Black : Color::White;
 	}
 
-	void print()
+	void print() const
 	{
 		enum Color now = validate();
 		unsigned long long black, white;
@@ -185,25 +241,15 @@ struct Board
 		return win(You);
 	}
 
-	enum State place_fast(int xyz)
+	enum State place_fast(unsigned long long bit)
 	{
-		Me |= 1uLL << xyz;
+		Me |= bit;
 		swap(Me, You);
 		return win(You);
 	}
 
 	unsigned long long valid_move() const
 	{
-		/*
-		   unsigned long long ret = 0uLL;
-		   for(int x=0;x<SIZE;x++)for(int y=0;y<SIZE;y++)
-		   {
-		   int z=0;
-		   while(z<4 && get_cell(x, y, z) != Cell::None) z++;
-		   if(z<4) ret |= 1uLL << IDX(x, y, z);
-		   }
-		   assert(ret == (((Me | You) << SIZE * SIZE | ((1uLL << SIZE * SIZE) - 1)) & ~(Me | You)));
-		   */
 		return ((Me | You) << SIZE * SIZE | ((1uLL << SIZE * SIZE) - 1)) & ~(Me | You);
 	}
 };
@@ -319,45 +365,38 @@ struct Game
 
 
 template<typename F>
-pair<unsigned long long, double> read_DFS (Board board, int level, const F& evaluate_func)
+pair<unsigned long long, double> read_DFS(Board board, int level, const F& evaluate_func)
 {
-	pair<unsigned long long, double> mv;
-	mv.first = 0uLL;
-
-	if (level == 0)
-	{
-		mv.second = evaluate_func(board);
-		return mv;
-	}
+	if (level == 0) return make_pair(0uLL, evaluate_func(board));
 
 	assert(level >= 1);
 	unsigned long long hand = board.valid_move();
-	if (!hand)
-	{
-		mv.second=0;
-		return mv;
+	if (!hand) return make_pair(0uLL, (double)0);
+
+	{//reach
+		{
+			const unsigned long long r = hand & Board::reach(board.Me);
+			if (r) return make_pair(r, (double)INF);
+		}
+		{
+			const unsigned long long r = hand & Board::reach(board.You);
+			if (r) hand = r;
+		}
 	}
 
-	mv.second = -INF;
-	for (int xyz = 0; xyz < BOARD_SIZE; xyz++) if (hand & 1uLL << xyz)
+	pair<unsigned long long, double> mv = make_pair(0uLL, (double)-INF);
+	while (hand)
 	{
+		const unsigned long long bit = hand & -hand;
 		Board b = board;
-		enum State r = b.place_fast(xyz);
-		assert(r != State::Invalid);
-		double ev;
-		if (r == State::End) ev = INF;
-		else
-		{
-			ev = -read_DFS(b, level - 1, evaluate_func).second;
-			if (ev > INF - BOARD_SIZE * 2) ev = ev - 1;
-			else if (ev < -INF + BOARD_SIZE * 2) ev = ev + 1;
-		}
-		if (mv.second < ev)
-		{
-			mv.first = 0uLL;
-			mv.second = ev;
-		}
-		if (mv.second == ev) mv.first |= 1uLL << xyz;
+		enum State r = b.place_fast(bit);
+		assert(r == State::Continue);
+		double ev = -read_DFS(b, level - 1, evaluate_func).second;
+		if (ev > INF - BOARD_SIZE * 2) ev = ev - 1;
+		else if (ev < -INF + BOARD_SIZE * 2) ev = ev + 1;
+		if (mv.second < ev) mv = make_pair(0uLL, ev);
+		if (mv.second == ev) mv.first |= bit;
+		hand ^= bit;
 	}
 	assert(mv.first);
 	return mv;
@@ -373,24 +412,22 @@ struct AIPlayer : Player
 
 	pair<int, int> move(Board board) override
 	{
-		unsigned long long hand = board.valid_move();
+		const unsigned long long hand = board.valid_move();
 		assert(hand);
 
-		auto ret = board.count();
-		for(const int v : ret) assert(abs(v) < 4);
-		for(int i=0;i<ret.size();i++)if(ret[i]==3)
 		{
-			if(hand & LINES[i])
+			const unsigned long long r = hand & Board::reach(board.Me);
+			if (r)
 			{
-				int v = __builtin_ctzll(hand & LINES[i]);
+				int v = __builtin_ctzll(v);
 				return make_pair(X(v), Y(v));
 			}
 		}
-		for(int i=0;i<ret.size();i++)if(ret[i]==-3)
 		{
-			if(hand & LINES[i])
+			const unsigned long long r = hand & Board::reach(board.You);
+			if (r)
 			{
-				int v = __builtin_ctzll(hand & LINES[i]);
+				int v = __builtin_ctzll(v);
 				return make_pair(X(v), Y(v));
 			}
 		}
@@ -495,13 +532,17 @@ int main()
 			assert(Board::win(LINES[j]) == State::End);
 		}
 
-		auto dfs = [](auto self, int id, unsigned long long B, int rest) {
+		unsigned long long ret = 0uLL;
+		auto dfs = [&](auto self, int id, unsigned long long B, int rest) -> void
+		{
 			if (id == 64)
 			{
-				if (rest > 0) return;
-				bool win = false;
-				for (unsigned long long L : LINES) if ((L & B) == L) win = true;
-				assert(win == (Board::win(B) == State::End));
+				if (Board::win(B) == State::Continue)
+				{
+					//ret |= Board::reach_naive(B);
+					//ret |= Board::reach(B);
+					//assert(Board::reach_naive(B) == Board::reach(B));
+				}
 			}
 			else
 			{
@@ -509,8 +550,8 @@ int main()
 				if (rest > 0) self(self, id + 1, B | 1uLL << id, rest - 1);
 			}
 		};
-		//validation of checking win
-		dfs(dfs, 0, 0uLL, 4);
+		//validation
+		//dfs(dfs, 0, 0uLL, 6);
 	}
 
 	auto evaluate = [](const Board&board) -> double

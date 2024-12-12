@@ -553,42 +553,25 @@ int main()
 		//dfs(dfs, 0, 0uLL, 6);
 	}
 
-	auto evaluate = [](const Board&board) -> double
+	auto evaluate = [](const Board &board) -> int
 	{
 		int sum = 0;
-		for(int v : board.count()) sum += v;
-		return (double)sum;
+		for (int v : board.count()) sum += v;
+		return sum;
 	};
-	auto evaluate_cont = [](const Board&board) -> double
+	auto continuous = [](const unsigned long long reach) -> int
 	{
-		int sum = 0;
-		for(int v : board.count()) sum += v;
-		{
-			const unsigned long long r = Board::reach(board.Me) & ~board.You;
-			sum += __builtin_popcountll(r & r << SIZE * SIZE) * 100;
-		}
-		{
-			const unsigned long long r = Board::reach(board.You) & ~board.Me;
-			sum -= __builtin_popcountll(r & r << SIZE * SIZE) * 100;
-		}
-		return (double)sum;
+		return __builtin_popcountll(reach & reach << SIZE * SIZE) * 100;
 	};
-	auto evaluate_3 = [](const Board&board) -> double
+	auto reach_layer = [&](const enum Color now, unsigned long long rMe, unsigned long long rYou, const unsigned long long hand) -> int
 	{
-		int sum = 0;
-		for(int v : board.count()) sum += v;
-		const enum Color now = board.validate();
-		const unsigned long long not_hand = ~board.valid_move();
+		rMe &= ~hand;
+		rYou &= ~hand;
 		static const unsigned long long mask_2 = 0x00000000ffff0000uLL;
 		static const unsigned long long mask_3 = 0x0000ffff00000000uLL;
 		static const unsigned long long mask_4 = 0xffff000000000000uLL;
-		unsigned long long rMe = Board::reach(board.Me) & ~board.You;
-		unsigned long long rYou = Board::reach(board.You) & ~board.Me;
-		sum += __builtin_popcountll(rMe & rMe << SIZE * SIZE) * 100;
-		sum -= __builtin_popcountll(rYou & rYou << SIZE * SIZE) * 100;
 
-		rMe &= not_hand;
-		rYou &= not_hand;
+		int sum = 0;
 		if (now == Color::Black)
 		{//first (black) player
 			{//Me, first (black) player
@@ -615,12 +598,34 @@ int main()
 				sum -= __builtin_popcountll(rYou & mask_4) * 1;//4th layer
 			}
 		}
-		return (double)sum;
+		return sum;
+	};
+	auto evaluate_cont = [&](const Board &board) -> double
+	{
+		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
+		const unsigned long long rYou = Board::reach(board.You) & ~board.Me;
+		return evaluate(board) + continuous(rMe) - continuous(rYou);
+	};
+	auto evaluate_layer = [&](const Board &board) -> double
+	{
+		const enum Color now = board.validate();
+		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
+		const unsigned long long rYou = Board::reach(board.You) & ~board.Me;
+		const unsigned long long hand = board.valid_move();
+		return evaluate(board) + reach_layer(now, rMe, rYou, hand);
+	};
+	auto evaluate_cont_layer = [&](const Board &board) -> double
+	{
+		const enum Color now = board.validate();
+		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
+		const unsigned long long rYou = Board::reach(board.You) & ~board.Me;
+		const unsigned long long hand = board.valid_move();
+		return evaluate(board) + continuous(rMe) - continuous(rYou) + reach_layer(now, rMe, rYou, hand);
 	};
 
 	HumanPlayer H;
-	AIPlayer p1(7, evaluate_3);
-	AIPlayer p2(7, evaluate_3);
+	AIPlayer p1(7, evaluate_cont_layer);
+	AIPlayer p2(7, evaluate_cont_layer);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
 	game.game();
 	return 0;

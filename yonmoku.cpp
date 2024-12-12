@@ -573,15 +573,37 @@ int main()
 		}
 		return (double)sum;
 	};
+	auto evaluate_3 = [](const Board&board) -> double
+	{
+		int sum = 0;
+		for(int v : board.count()) sum += v;
+		const enum Color now = board.validate();
+		const unsigned long long not_hand = ~board.valid_move();
+		static const unsigned long long mask_2 = 0x00000000ffff0000uLL;
+		static const unsigned long long mask_3 = 0x0000ffff00000000uLL;
+		{
+			const unsigned long long r = Board::reach(board.Me) & ~board.You;
+			sum += __builtin_popcountll(r & r << SIZE * SIZE) * 100;
+			if (now == Color::Black) sum += __builtin_popcountll(r & mask_3 & not_hand) * 3;
+			else sum += __builtin_popcountll(r & mask_2 & not_hand) * 3;
+		}
+		{
+			const unsigned long long r = Board::reach(board.You) & ~board.Me;
+			sum -= __builtin_popcountll(r & r << SIZE * SIZE) * 100;
+			if (now == Color::Black) sum -= __builtin_popcountll(r & mask_2 & not_hand) * 3;
+			else sum -= __builtin_popcountll(r & mask_3 & not_hand) * 3;
+		}
+		return (double)sum;
+	};
 
 	HumanPlayer H;
-	AIPlayer p1(4, evaluate);
-	AIPlayer p2(4, evaluate);
+	AIPlayer p1(4, evaluate_3);
+	AIPlayer p2(4, evaluate_3);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
-	game.game();
-	return 0;
+	//game.game();
+	//return 0;
 	int cnt[3] = {};
-	for(int t=1;;t++)
+	for (int t = 1; ; t++)
 	{
 		cout << "Game #" << t << endl;
 		Game game(&p1, &p2, false, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});

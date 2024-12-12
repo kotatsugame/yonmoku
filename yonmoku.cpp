@@ -357,12 +357,11 @@ struct Game
 			cout << "DRAW" << endl;
 		}
 		cout << "hands :";
-		for (auto [x,y] : hand) cout << " (" << x << ", " << y << "),";
+		for (auto [x,y] : hand) cout << " {" << x << ", " << y << "},";
 		cout << endl;
 		return result;
 	}
 };
-
 
 template<typename F>
 pair<unsigned long long, double> read_DFS(Board board, int level, const F& evaluate_func)
@@ -575,11 +574,12 @@ int main()
 		return (double)sum;
 	};
 
+	HumanPlayer H;
 	AIPlayer p1(4, evaluate);
 	AIPlayer p2(4, evaluate);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
-	//game.game();
-	//return 0;
+	game.game();
+	return 0;
 	int cnt[3] = {};
 	for(int t=1;;t++)
 	{

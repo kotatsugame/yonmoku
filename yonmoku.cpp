@@ -581,27 +581,49 @@ int main()
 		const unsigned long long not_hand = ~board.valid_move();
 		static const unsigned long long mask_2 = 0x00000000ffff0000uLL;
 		static const unsigned long long mask_3 = 0x0000ffff00000000uLL;
-		{
-			const unsigned long long r = Board::reach(board.Me) & ~board.You;
-			sum += __builtin_popcountll(r & r << SIZE * SIZE) * 100;
-			if (now == Color::Black) sum += __builtin_popcountll(r & mask_3 & not_hand) * 3;
-			else sum += __builtin_popcountll(r & mask_2 & not_hand) * 3;
+		static const unsigned long long mask_4 = 0xffff000000000000uLL;
+		unsigned long long rMe = Board::reach(board.Me) & ~board.You;
+		unsigned long long rYou = Board::reach(board.You) & ~board.Me;
+		sum += __builtin_popcountll(rMe & rMe << SIZE * SIZE) * 100;
+		sum -= __builtin_popcountll(rYou & rYou << SIZE * SIZE) * 100;
+
+		rMe &= not_hand;
+		rYou &= not_hand;
+		if (now == Color::Black)
+		{//first (black) player
+			{//Me, first (black) player
+				sum += __builtin_popcountll(rMe & mask_2) * 1;//2nd layer
+				sum += __builtin_popcountll(rMe & mask_3) * 3;//3rd layer
+				sum += __builtin_popcountll(rMe & mask_4) * 2;//4th layer
+			}
+			{//You, second (white) player
+				sum -= __builtin_popcountll(rYou & mask_2) * 4;//2nd layer
+				sum -= __builtin_popcountll(rYou & mask_3) * 2;//3rd layer
+				sum -= __builtin_popcountll(rYou & mask_4) * 1;//4th layer
+			}
 		}
-		{
-			const unsigned long long r = Board::reach(board.You) & ~board.Me;
-			sum -= __builtin_popcountll(r & r << SIZE * SIZE) * 100;
-			if (now == Color::Black) sum -= __builtin_popcountll(r & mask_2 & not_hand) * 3;
-			else sum -= __builtin_popcountll(r & mask_3 & not_hand) * 3;
+		else
+		{//second (white) player
+			{//Me, second (white) player
+				sum += __builtin_popcountll(rMe & mask_2) * 4;//2nd layer
+				sum += __builtin_popcountll(rMe & mask_3) * 1;//3rd layer
+				sum += __builtin_popcountll(rMe & mask_4) * 2;//4th layer
+			}
+			{//You, first (black) player
+				sum -= __builtin_popcountll(rYou & mask_2) * 2;//2nd layer
+				sum -= __builtin_popcountll(rYou & mask_3) * 3;//3rd layer
+				sum -= __builtin_popcountll(rYou & mask_4) * 1;//4th layer
+			}
 		}
 		return (double)sum;
 	};
 
 	HumanPlayer H;
-	AIPlayer p1(4, evaluate_3);
-	AIPlayer p2(4, evaluate_3);
+	AIPlayer p1(7, evaluate_3);
+	AIPlayer p2(7, evaluate_3);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
-	//game.game();
-	//return 0;
+	game.game();
+	return 0;
 	int cnt[3] = {};
 	for (int t = 1; ; t++)
 	{

@@ -419,7 +419,7 @@ struct AIPlayer : Player
 			const unsigned long long r = hand & Board::reach(board.Me);
 			if (r)
 			{
-				int v = __builtin_ctzll(v);
+				int v = __builtin_ctzll(r);
 				return make_pair(X(v), Y(v));
 			}
 		}
@@ -427,7 +427,7 @@ struct AIPlayer : Player
 			const unsigned long long r = hand & Board::reach(board.You);
 			if (r)
 			{
-				int v = __builtin_ctzll(v);
+				int v = __builtin_ctzll(r);
 				return make_pair(X(v), Y(v));
 			}
 		}
@@ -678,16 +678,16 @@ int main()
 //Game game(&H, &AI, true, true);
 //game.game();
 //return 0;
-	AIPlayer p1(7, evaluate);
-	AIPlayer p2(7, evaluate);
+	AIPlayer p1(4, evaluate);
+	AIPlayer p2(4, evaluate);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
-	game.game();
-	return 0;
+	//game.game();
+	//return 0;
 	int cnt[3] = {};
 	for(int t=1;;t++)
 	{
 		cout<<"Game #"<<t<<endl;
-		Game game(&p1, &p2, false, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
+		Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
 		enum Color r = game.game();
 		cnt[r]++;
 		cout<<"Black : "<<cnt[Color::Black]<<endl;

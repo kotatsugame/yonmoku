@@ -23,7 +23,7 @@ const int SIZE = 4;
 #define Y(idx) ((idx) / SIZE % SIZE)
 #define Z(idx) ((idx) / SIZE / SIZE)
 const int BOARD_SIZE = SIZE * SIZE * SIZE;
-const int INF = 1e3;
+const int INF = 1e9;
 const int LINES_NUM = 76;
 
 array<unsigned long long, LINES_NUM> LINES;
@@ -560,124 +560,21 @@ int main()
 		for(int v : board.count()) sum += v;
 		return (double)sum;
 	};
-	/*
-	   auto evaluate_bonus=[](const Board&board,const array<int,76>&ret)->double
-	   {
-	   double ev=0;
-	   for(int i=0;i<76;i++)
-	   {
-	   int c=ret[i];
-	   if(c==0)continue;
-	   int t=abs(c);
-	   if(t==3)
-	   {
-	   bool fn=false;
-	   for(int xyz:LINES[i])
-	   {
-	   if(xyz>=16&&board.board[xyz-16]==0)
-	   {
-	   fn=true;
-	   break;
-	   }
-	   }
-	   if(fn)t+=2;
-	   }
-	   ev+=c>0?t:-t;
-	   }
-	   return ev;
-	   };
-	   auto evaluate_bonus_cont=[](const Board&board,const array<int,76>&ret)->double
-	   {
-	   double ev=0;
-	   map<pair<int,int>,vector<int> >win,lose;
-	   for(int i=0;i<76;i++)
-	   {
-	   int c=ret[i];
-	   if(c==0)continue;
-	   int t=abs(c);
-	   if(t==3)
-	   {
-	   bool fn=false;
-	   int emp=INF;
-	   for(int xyz:LINES[i])
-	   {
-	   if(xyz>=16&&board.board[xyz-16]==0)fn=true;
-	   if(board.board[xyz]==0)
-	   {
-	   assert(emp==INF);
-	   emp=xyz;
-	   }
-	   }
-	   if(fn)t+=2;
-	   assert(emp!=INF);
-	   int x=emp%4,y=emp/4%4,z=emp/16;
-	   if(c>0)win[make_pair(x,y)].push_back(z);
-	   else lose[make_pair(x,y)].push_back(z);
-	   }
-	   ev+=c>0?t:-t;
-	   }
-	   for(auto&&[_,zv]:win)
-	   {
-	   for(int i=1;i<zv.size();i++)if(abs(zv[i-1]-zv[i])==1)ev+=100;
-	   }
-	   for(auto&&[_,zv]:lose)
-	   {
-	   for(int i=1;i<zv.size();i++)if(abs(zv[i-1]-zv[i])==1)ev-=100;
-	   }
-	   return ev;
-	   };
-
-	   auto evaluate_bonus_div10=[](const Board&board,const array<int,76>&ret)->double
-	   {
-	   double ev=0;
-	   for(int i=0;i<76;i++)
+	auto evaluate_cont = [](const Board&board) -> double
 	{
-		int c=ret[i];
-		if(c==0)continue;
-		int t=abs(c);
-		if(t==3)
+		int sum = 0;
+		for(int v : board.count()) sum += v;
 		{
-			bool fn=false;
-			for(int xyz:LINES[i])
-			{
-				if(xyz>=16&&board.board[xyz-16]==0)
-				{
-					fn=true;
-					break;
-				}
-			}
-			if(fn)t+=2;
+			const unsigned long long r = Board::reach(board.Me) & ~board.You;
+			sum += __builtin_popcountll(r & r << SIZE * SIZE) * 100;
 		}
-		double s=c>0?t:-t;
 		{
-			bool fn=false;
-			for(int j=1;j<4;j++)if(LINES[i][j-1]%16!=LINES[i][j]%16)
-			{
-				fn=true;
-				break;
-			}
-			if(!fn)s/=10;
-			else
-			{
-				bool all=true;
-				for(int xyz:LINES[i])if(xyz<3*16)
-				{
-					all=false;
-					break;
-				}
-				if(all)s/=10;
-			}
+			const unsigned long long r = Board::reach(board.You) & ~board.Me;
+			sum -= __builtin_popcountll(r & r << SIZE * SIZE) * 100;
 		}
-		ev+=s;
-	}
-	return ev;
-};
-*/
-//AIPlayer AI(8,evaluate_bonus_cont);
-//HumanPlayer H;
-//Game game(&H, &AI, true, true);
-//game.game();
-//return 0;
+		return (double)sum;
+	};
+
 	AIPlayer p1(4, evaluate);
 	AIPlayer p2(4, evaluate);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
@@ -686,13 +583,13 @@ int main()
 	int cnt[3] = {};
 	for(int t=1;;t++)
 	{
-		cout<<"Game #"<<t<<endl;
-		Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
+		cout << "Game #" << t << endl;
+		Game game(&p1, &p2, false, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
 		enum Color r = game.game();
 		cnt[r]++;
-		cout<<"Black : "<<cnt[Color::Black]<<endl;
-		cout<<"White : "<<cnt[Color::White]<<endl;
-		cout<<" Draw : "<<cnt[Color::Draw]<<endl;
+		cout << "Black : " << cnt[Color::Black] << endl;
+		cout << "White : " << cnt[Color::White] << endl;
+		cout << " Draw : " << cnt[Color::Draw] << endl;
 	}
 	return 0;
 }

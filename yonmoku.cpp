@@ -559,9 +559,10 @@ int main()
 		for (int v : board.count()) sum += v;
 		return sum;
 	};
-	auto continuous = [](const unsigned long long reach) -> int
+	auto continuous = [](unsigned long long rMe, const unsigned long long rYou) -> int
 	{
-		return __builtin_popcountll(reach & reach << SIZE * SIZE) * 100;
+		rMe &= ~(rYou << SIZE * SIZE);
+		return __builtin_popcountll(rMe & rMe << SIZE * SIZE) * 100;
 	};
 	auto reach_layer = [&](const enum Color now, unsigned long long rMe, unsigned long long rYou, const unsigned long long hand) -> int
 	{
@@ -604,7 +605,7 @@ int main()
 	{
 		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
 		const unsigned long long rYou = Board::reach(board.You) & ~board.Me;
-		return evaluate(board) + continuous(rMe) - continuous(rYou);
+		return evaluate(board) + continuous(rMe, rYou) - continuous(rYou, rMe);
 	};
 	auto evaluate_layer = [&](const Board &board) -> double
 	{
@@ -620,7 +621,7 @@ int main()
 		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
 		const unsigned long long rYou = Board::reach(board.You) & ~board.Me;
 		const unsigned long long hand = board.valid_move();
-		return evaluate(board) + continuous(rMe) - continuous(rYou) + reach_layer(now, rMe, rYou, hand);
+		return evaluate(board) + continuous(rMe, rYou) - continuous(rYou, rMe) + reach_layer(now, rMe, rYou, hand);
 	};
 
 	HumanPlayer H;

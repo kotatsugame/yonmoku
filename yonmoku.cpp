@@ -28,6 +28,13 @@ const int INF = 1e9;
 const int LINES_NUM = 76;
 
 array<unsigned long long, LINES_NUM> LINES;
+static const unsigned long long move_order[] = {
+	BIT(0, 0, 0) | BIT(0, 3, 0) | BIT(3, 0, 0) | BIT(3, 3, 0) |
+	BIT(1, 1, 1) | BIT(1, 2, 1) | BIT(2, 1, 1) | BIT(2, 2, 1) |
+	BIT(1, 1, 2) | BIT(1, 2, 2) | BIT(2, 1, 2) | BIT(2, 2, 2) |
+	BIT(0, 0, 3) | BIT(0, 3, 3) | BIT(3, 0, 3) | BIT(3, 3, 3),// first
+	0xffffffffffffffffuLL,// last
+};
 
 struct Board
 {
@@ -370,18 +377,18 @@ struct Game
 };
 
 template<typename F>
-pair<unsigned long long, double> read_DFS(Board board, int level, const F& evaluate_func)
+pair<unsigned long long, int> read_DFS(Board board, int level, const F& evaluate_func)
 {
 	if (level == 0) return make_pair(0uLL, evaluate_func(board));
 
 	assert(level >= 1);
 	unsigned long long hand = board.valid_move();
-	if (!hand) return make_pair(0uLL, (double)0);
+	if (!hand) return make_pair(0uLL, 0);
 
 	{//reach
 		{
 			const unsigned long long r = hand & Board::reach(board.Me);
-			if (r) return make_pair(r, (double)INF);
+			if (r) return make_pair(r, INF);
 		}
 		{
 			const unsigned long long r = hand & Board::reach(board.You);
@@ -389,14 +396,14 @@ pair<unsigned long long, double> read_DFS(Board board, int level, const F& evalu
 		}
 	}
 
-	pair<unsigned long long, double> mv = make_pair(0uLL, (double)-INF);
+	pair<unsigned long long, int> mv = make_pair(0uLL, -INF);
 	while (hand)
 	{
 		const unsigned long long bit = hand & -hand;
 		Board b = board;
 		enum State r = b.place_fast(bit);
 		assert(r == State::Continue);
-		double ev = -read_DFS(b, level - 1, evaluate_func).second;
+		int ev = -read_DFS(b, level - 1, evaluate_func).second;
 		if (ev > INF - BOARD_SIZE * 2) ev = ev - 1;
 		else if (ev < -INF + BOARD_SIZE * 2) ev = ev + 1;
 		if (mv.second < ev) mv = make_pair(0uLL, ev);
@@ -415,33 +422,40 @@ struct AIPlayer : Player
 	F evaluate_func;
 	AIPlayer(int level, F evaluate_func) : level(level), evaluate_func(evaluate_func) { assert(level >= 1); }
 
-	double evaluate_board(Board board, int level, double alpha, double beta)
+	int evaluate_board(Board board, int level, int alpha, int beta)
 	{
 		unsigned long long hand = board.valid_move();
-		if (!hand) return (double) 0;
+		if (!hand) return 0;
 
 		{//reach
 			{
 				const unsigned long long r = hand & Board::reach(board.Me);
-				if (r) return (double) INF;
+				if (r) return INF;
 			}
 			{
-				const unsigned long long r = hand & Board::reach(board.You);
-				if (r) hand = r;
+				const unsigned long long r = Board::reach(board.You);
+				if (hand & r) hand = hand & r;
 				else if (level <= 0) return evaluate_func(board);
+				else hand &= ~(r >> SIZE * SIZE);
 			}
 		}
 
-		while (hand)
+		for(const unsigned long long mask: move_order)
 		{
-			const unsigned long long bit = hand & -hand;
-			Board b = board;
-			enum State r = b.place_fast(bit);
-			assert(r == State::Continue);
-			double ev = -evaluate_board(b, level - 1, -beta, -alpha);
-			alpha = max(alpha, ev);
+			unsigned long long h = hand & mask;
+			hand ^= h;
+			while (h)
+			{
+				const unsigned long long bit = h & -h;
+				Board b = board;
+				enum State r = b.place_fast(bit);
+				assert(r == State::Continue);
+				int ev = -evaluate_board(b, level - 1, -beta, -alpha);
+				alpha = max(alpha, ev);
+				if (alpha >= beta) break;
+				h ^= bit;
+			}
 			if (alpha >= beta) break;
-			hand ^= bit;
 		}
 		return alpha;
 	}
@@ -465,18 +479,23 @@ struct AIPlayer : Player
 		}
 
 		unsigned long long mv = 0uLL;
-		double mx = -INF - 1;
+		int mx = -INF;
 
-		while (hand)
+		for(const unsigned long long mask: move_order)
 		{
-			const unsigned long long bit = hand & -hand;
-			Board b = board;
-			enum State r = b.place_fast(bit);
-			assert(r == State::Continue);
-			double ev = -evaluate_board(b, level - 1, -INF - 1, INF + 1);
-			if (mx < ev) mv = 0uLL, mx = ev;
-			if (mx == ev) mv |= bit;
-			hand ^= bit;
+			unsigned long long h = hand & mask;
+			hand ^= h;
+			while (h)
+			{
+				const unsigned long long bit = h & -h;
+				Board b = board;
+				enum State r = b.place_fast(bit);
+				assert(r == State::Continue);
+				int ev = -evaluate_board(b, level - 1, mx, -mx);
+				if (mx < ev) mv = 0uLL, mx = ev;
+				if (mx == ev) mv |= bit;
+				h ^= bit;
+			}
 		}
 
 		//const int turn = board.turn();// turn number (the number of stones = turn - 1)
@@ -653,6 +672,11 @@ int main()
 		//validation
 		//dfs(dfs, 0, 0uLL, 6);
 	}
+	{//validate move_order
+		unsigned long long mv = 0uLL;
+		for(unsigned long long mask: move_order) mv |= mask;
+		assert(mv == 0xffffffffffffffffuLL);
+	}
 
 	auto evaluate = [](const Board &board) -> int
 	{
@@ -702,13 +726,13 @@ int main()
 		}
 		return sum;
 	};
-	auto evaluate_cont = [&](const Board &board) -> double
+	auto evaluate_cont = [&](const Board &board) -> int
 	{
 		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
 		const unsigned long long rYou = Board::reach(board.You) & ~board.Me;
 		return evaluate(board) + continuous(rMe, rYou) - continuous(rYou, rMe);
 	};
-	auto evaluate_layer = [&](const Board &board) -> double
+	auto evaluate_layer = [&](const Board &board) -> int
 	{
 		const enum Color now = board.player();
 		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
@@ -716,7 +740,7 @@ int main()
 		const unsigned long long hand = board.valid_move();
 		return evaluate(board) + reach_layer(now, rMe, rYou, hand);
 	};
-	auto evaluate_cont_layer = [&](const Board &board) -> double
+	auto evaluate_cont_layer = [&](const Board &board) -> int
 	{
 		const enum Color now = board.player();
 		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
@@ -726,8 +750,8 @@ int main()
 	};
 
 	HumanPlayer H;
-	AIPlayer p1(8, evaluate_cont_layer);
-	AIPlayer_minimax p2(6, evaluate_cont_layer);
+	AIPlayer p1(4, evaluate_cont_layer);
+	AIPlayer_minimax p2(4, evaluate_cont_layer);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
 	//game.game();
 	//return 0;

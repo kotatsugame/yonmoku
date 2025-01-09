@@ -440,7 +440,7 @@ struct AIPlayer : Player
 			}
 		}
 
-		for(const unsigned long long mask: move_order)
+		for (const unsigned long long mask: move_order)
 		{
 			unsigned long long h = hand & mask;
 			hand ^= h;
@@ -481,16 +481,21 @@ struct AIPlayer : Player
 		unsigned long long mv = 0uLL;
 		int mx = -INF;
 
-		while (hand)
+		for (const unsigned long long mask: move_order)
 		{
-			const unsigned long long bit = hand & -hand;
-			Board b = board;
-			enum State r = b.place_fast(bit);
-			assert(r == State::Continue);
-			int ev = -evaluate_board(b, level - 1, -INF - 1, INF + 1);
-			if (mx < ev) mv = 0uLL, mx = ev;
-			if (mx == ev) mv |= bit;
-			hand ^= bit;
+			unsigned long long h = hand & mask;
+			hand ^= h;
+			while (h)
+			{
+				const unsigned long long bit = h & -h;
+				Board b = board;
+				enum State r = b.place_fast(bit);
+				assert(r == State::Continue);
+				int ev = -evaluate_board(b, level - 1, -INF - 1, -mx + 1);
+				if (mx < ev) mv = 0uLL, mx = ev;
+				if (mx == ev) mv |= bit;
+				h ^= bit;
+			}
 		}
 
 		//const int turn = board.turn();// turn number (the number of stones = turn - 1)
@@ -745,11 +750,11 @@ int main()
 	};
 
 	HumanPlayer H;
-	AIPlayer p1(4, evaluate_cont_layer);
-	AIPlayer_minimax p2(4, evaluate_cont_layer);
+	AIPlayer p1(8, evaluate_cont_layer);
+	AIPlayer p2(8, evaluate_cont_layer);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
-	//game.game();
-	//return 0;
+	game.game();
+	return 0;
 	int cnt[3] = {};
 	for (int t = 1; ; t++)
 	{

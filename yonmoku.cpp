@@ -11,8 +11,8 @@
 
 using namespace std;
 
-mt19937 rng(random_device{}());
-//mt19937 rng;
+//mt19937 rng(random_device{}());
+mt19937 rng;
 enum Cell{None, Me, You};
 enum State{Continue, End, Invalid};
 enum Color{Draw, Black, White};
@@ -491,7 +491,9 @@ struct AIPlayer : Player
 				Board b = board;
 				enum State r = b.place_fast(bit);
 				assert(r == State::Continue);
-				int ev = -evaluate_board(b, level - 1, -INF - 1, -mx + 1);
+				int ev = -evaluate_board(b, level - 1, -INF, -mx + 1);
+				if (ev > INF) ev = INF;
+				else if (ev < -INF) ev = -INF;
 				if (mx < ev) mv = 0uLL, mx = ev;
 				if (mx == ev) mv |= bit;
 				h ^= bit;
@@ -750,11 +752,11 @@ int main()
 	};
 
 	HumanPlayer H;
-	AIPlayer p1(8, evaluate_cont_layer);
-	AIPlayer p2(8, evaluate_cont_layer);
+	AIPlayer p1(4, evaluate_cont_layer);
+	AIPlayer p2(4, evaluate_cont_layer);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
-	game.game();
-	return 0;
+	//game.game();
+	//return 0;
 	int cnt[3] = {};
 	for (int t = 1; ; t++)
 	{

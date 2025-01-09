@@ -481,21 +481,16 @@ struct AIPlayer : Player
 		unsigned long long mv = 0uLL;
 		int mx = -INF;
 
-		for(const unsigned long long mask: move_order)
+		while (hand)
 		{
-			unsigned long long h = hand & mask;
-			hand ^= h;
-			while (h)
-			{
-				const unsigned long long bit = h & -h;
-				Board b = board;
-				enum State r = b.place_fast(bit);
-				assert(r == State::Continue);
-				int ev = -evaluate_board(b, level - 1, mx, -mx);
-				if (mx < ev) mv = 0uLL, mx = ev;
-				if (mx == ev) mv |= bit;
-				h ^= bit;
-			}
+			const unsigned long long bit = hand & -hand;
+			Board b = board;
+			enum State r = b.place_fast(bit);
+			assert(r == State::Continue);
+			int ev = -evaluate_board(b, level - 1, -INF - 1, INF + 1);
+			if (mx < ev) mv = 0uLL, mx = ev;
+			if (mx == ev) mv |= bit;
+			hand ^= bit;
 		}
 
 		//const int turn = board.turn();// turn number (the number of stones = turn - 1)

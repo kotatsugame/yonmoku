@@ -270,8 +270,29 @@ struct Board
 struct Player
 {
 	bool verbose;
+	int random;
+	Player() : verbose(false), random(0) {}
 	void set_verbose(bool verbose_) {verbose = verbose_;}
-	virtual pair<int,int> move(Board board) = 0;
+	void set_random(int random_) {random = random_;}
+	pair<int, int> move_random(Board board)
+	{
+		unsigned long long hand = board.valid_move();
+		assert(hand);
+
+		const int sz = __builtin_popcountll(hand);
+		int idx = rng() % sz + 1;
+		int v = 0;
+		for (; v < 64; v++) if (hand >> v & 1)
+		{
+			idx--;
+			if (idx == 0) break;
+		}
+		assert(idx == 0);
+
+		if (verbose) cout << "random move (" << X(v) + 1 << ", " << Y(v) + 1 << ", " << Z(v) + 1 << ")" << endl;
+		return make_pair(X(v), Y(v));
+	}
+	virtual pair<int, int> move(Board board) = 0;
 };
 
 struct HumanPlayer : Player
@@ -418,6 +439,7 @@ template<typename F>
 struct AIPlayer : Player
 {
 	using Player::verbose;
+	using Player::random;
 	int level;
 	F evaluate_func;
 	AIPlayer(int level, F evaluate_func) : level(level), evaluate_func(evaluate_func) { assert(level >= 1); }
@@ -430,13 +452,14 @@ struct AIPlayer : Player
 		{//reach
 			{
 				const unsigned long long r = hand & Board::reach(board.Me);
-				if (r) return INF;
+				if (r) return INF - board.turn();
 			}
 			{
 				const unsigned long long r = Board::reach(board.You);
 				if (hand & r) hand = hand & r;
 				else if (level <= 0) return evaluate_func(board);
-				else hand &= ~(r >> SIZE * SIZE);
+				hand &= ~(r >> SIZE * SIZE);
+				if (!hand) return -(INF - (board.turn() + 1));
 			}
 		}
 
@@ -478,6 +501,8 @@ struct AIPlayer : Player
 			if (r) hand = r;
 		}
 
+		if (random && rng() % 100 < random) return move_random(board);
+
 		unsigned long long mv = 0uLL;
 		int mx = -INF;
 
@@ -492,8 +517,6 @@ struct AIPlayer : Player
 				enum State r = b.place_fast(bit);
 				assert(r == State::Continue);
 				int ev = -evaluate_board(b, level - 1, -INF, -mx + 1);
-				if (ev > INF) ev = INF;
-				else if (ev < -INF) ev = -INF;
 				if (mx < ev) mv = 0uLL, mx = ev;
 				if (mx == ev) mv |= bit;
 				h ^= bit;
@@ -754,14 +777,15 @@ int main()
 	HumanPlayer H;
 	AIPlayer p1(4, evaluate_cont_layer);
 	AIPlayer p2(4, evaluate_cont_layer);
+	p2.set_random(20);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
-	//game.game();
-	//return 0;
+	game.game();
+	return 0;
 	int cnt[3] = {};
 	for (int t = 1; ; t++)
 	{
 		cout << "Game #" << t << endl;
-		Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
+		Game game(&p1, &p2, false, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
 		enum Color r = game.game();
 		cnt[r]++;
 		cout << "Black : " << cnt[Color::Black] << endl;

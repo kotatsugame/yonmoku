@@ -722,6 +722,10 @@ int main()
 		static const unsigned long long mask_3 = 0x0000ffff00000000uLL;
 		static const unsigned long long mask_4 = 0xffff000000000000uLL;
 
+		const unsigned long long intersection_3 = (rMe & rYou) & mask_3;
+		rMe ^= intersection_3;
+		rYou ^= intersection_3;
+
 		int sum = 0;
 		if (now == Color::Black)
 		{//first (black) player
@@ -735,6 +739,17 @@ int main()
 				sum -= __builtin_popcountll(rYou & mask_3) * 2;//3rd layer
 				sum -= __builtin_popcountll(rYou & mask_4) * 1;//4th layer
 			}
+			if (intersection_3)
+			{//if there exists intersections of reaches on 3rd layer
+				if (__builtin_parityll(intersection_3))
+				{//odd, black = Me
+					sum += 100;
+				}
+				else
+				{//even, white = You
+					sum -= 100;
+				}
+			}
 		}
 		else
 		{//second (white) player
@@ -747,6 +762,17 @@ int main()
 				sum -= __builtin_popcountll(rYou & mask_2) * 2;//2nd layer
 				sum -= __builtin_popcountll(rYou & mask_3) * 3;//3rd layer
 				sum -= __builtin_popcountll(rYou & mask_4) * 1;//4th layer
+			}
+			if (intersection_3)
+			{//if there exists intersections of reaches on 3rd layer
+				if (__builtin_parityll(intersection_3))
+				{//odd, black = You
+					sum -= 100;
+				}
+				else
+				{//even, white = Me
+					sum += 100;
+				}
 			}
 		}
 		return sum;

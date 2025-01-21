@@ -420,44 +420,6 @@ struct Game
 };
 
 template<typename F>
-pair<unsigned long long, int> read_DFS(Board board, int level, const F& evaluate_func)
-{
-	if (level == 0) return make_pair(0uLL, evaluate_func(board));
-
-	assert(level >= 1);
-	unsigned long long hand = board.valid_move();
-	if (!hand) return make_pair(0uLL, 0);
-
-	{//reach
-		{
-			const unsigned long long r = hand & Board::reach(board.Me);
-			if (r) return make_pair(r, INF);
-		}
-		{
-			const unsigned long long r = hand & Board::reach(board.You);
-			if (r) hand = r;
-		}
-	}
-
-	pair<unsigned long long, int> mv = make_pair(0uLL, -INF);
-	while (hand)
-	{
-		const unsigned long long bit = hand & -hand;
-		Board b = board;
-		enum State r = b.place_fast(bit);
-		assert(r == State::Continue);
-		int ev = -read_DFS(b, level - 1, evaluate_func).second;
-		if (ev > INF - BOARD_SIZE * 2) ev = ev - 1;
-		else if (ev < -INF + BOARD_SIZE * 2) ev = ev + 1;
-		if (mv.second < ev) mv = make_pair(0uLL, ev);
-		if (mv.second == ev) mv.first |= bit;
-		hand ^= bit;
-	}
-	assert(mv.first);
-	return mv;
-}
-
-template<typename F>
 struct AIPlayer : Player
 {
 	using Player::verbose;
@@ -555,59 +517,6 @@ struct AIPlayer : Player
 		{
 			if (now == Color::Black) cout<<"\033[31m";
 			cout << "score = " << mx << " by";
-			for (int xyz = 0; xyz < BOARD_SIZE; xyz++) if (mv & 1uLL << xyz)
-			{
-				cout << " (" << X(xyz) + 1 << ", " << Y(xyz) + 1 << ", " << Z(xyz) + 1 << "),";
-			}
-			if (now == Color::Black) cout<<"\033[m";
-			cout<<endl;
-		}
-		assert(mv);
-		{
-			vector<pair<int, int> > XY;
-			for (int xyz = 0; xyz < BOARD_SIZE; xyz++) if (mv & 1uLL << xyz) XY.emplace_back(X(xyz), Y(xyz));
-			return XY[rng() % XY.size()];
-		}
-	}
-};
-
-template<typename F>
-struct AIPlayer_minimax : Player
-{
-	using Player::verbose;
-	int level;
-	F evaluate_func;
-	AIPlayer_minimax(int level, F evaluate_func) : level(level), evaluate_func(evaluate_func) { assert(level >= 1); }
-
-	pair<int, int> move(Board board) override
-	{
-		unsigned long long hand = board.valid_move();
-		assert(hand);
-
-		{
-			const unsigned long long r = hand & Board::reach(board.Me);
-			if (r)
-			{
-				int v = __builtin_ctzll(r);
-				return make_pair(X(v), Y(v));
-			}
-		}
-		{
-			const unsigned long long r = hand & Board::reach(board.You);
-			if (r)
-			{
-				int v = __builtin_ctzll(r);
-				return make_pair(X(v), Y(v));
-			}
-		}
-
-		const int turn = board.turn();// turn number (the number of stones = turn - 1)
-		auto[mv, ev] = read_DFS(board, turn >= 40 ? level : level, evaluate_func);
-		enum Color now = board.validate();
-		if (verbose)
-		{
-			if (now == Color::Black) cout<<"\033[31m";
-			cout << "score = " << ev << " by";
 			for (int xyz = 0; xyz < BOARD_SIZE; xyz++) if (mv & 1uLL << xyz)
 			{
 				cout << " (" << X(xyz) + 1 << ", " << Y(xyz) + 1 << ", " << Z(xyz) + 1 << "),";

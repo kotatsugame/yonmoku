@@ -7,6 +7,7 @@
 #include<random>
 #include<set>
 #include<map>
+#include<unordered_map>
 #include<chrono>
 
 using namespace std;
@@ -266,6 +267,26 @@ struct Board
 	{
 		return ((Me | You) << SIZE * SIZE | ((1uLL << SIZE * SIZE) - 1)) & ~(Me | You);
 	}
+
+	bool operator==(const Board &rhs) const {return Me == rhs.Me && You == rhs.You;}
+};
+
+namespace std
+{
+	template<>
+	struct hash<Board>
+	{
+		size_t operator()(const Board &board) const
+		{
+			size_t ret = 0;
+			auto x = hash<unsigned long long>()(board.Me);
+			auto y = hash<unsigned long long>()(board.You);
+
+			ret ^= x + 0x9e3779b9 + (ret << 6) + (ret >> 2);
+			ret ^= y + 0x9e3779b9 + (ret << 6) + (ret >> 2);
+			return ret;
+		}
+    };
 };
 
 struct Player
@@ -445,7 +466,7 @@ struct AIPlayer : Player
 	F evaluate_func;
 	AIPlayer(int level, F evaluate_func) : level(level), evaluate_func(evaluate_func) { assert(level >= 1); }
 
-	int evaluate_board(Board board, int level, int alpha, int beta)
+	int evaluate_board(Board board, int level, int alpha, int beta, unordered_map<Board, int> &memo)
 	{
 		unsigned long long hand = board.valid_move();
 		if (!hand) return 0;
@@ -464,6 +485,8 @@ struct AIPlayer : Player
 			}
 		}
 
+		if (memo.find(board) != memo.end()) return memo[board];
+
 		for (const unsigned long long mask: move_order)
 		{
 			unsigned long long h = hand & mask;
@@ -474,14 +497,14 @@ struct AIPlayer : Player
 				Board b = board;
 				enum State r = b.place_fast(bit);
 				assert(r == State::Continue);
-				int ev = -evaluate_board(b, level - 1, -beta, -alpha);
+				int ev = -evaluate_board(b, level - 1, -beta, -alpha, memo);
 				alpha = max(alpha, ev);
 				if (alpha >= beta) break;
 				h ^= bit;
 			}
 			if (alpha >= beta) break;
 		}
-		return alpha;
+		return memo[board] = alpha;
 	}
 
 	pair<int, int> move(Board board) override
@@ -507,6 +530,7 @@ struct AIPlayer : Player
 		unsigned long long mv = 0uLL;
 		int mx = -INF;
 
+		unordered_map<Board, int> memo;
 		for (const unsigned long long mask: move_order)
 		{
 			unsigned long long h = hand & mask;
@@ -517,7 +541,7 @@ struct AIPlayer : Player
 				Board b = board;
 				enum State r = b.place_fast(bit);
 				assert(r == State::Continue);
-				int ev = -evaluate_board(b, level - 1, -INF, -mx + 1);
+				int ev = -evaluate_board(b, level - 1, -INF, -mx + 1, memo);
 				if (mx < ev) mv = 0uLL, mx = ev;
 				if (mx == ev) mv |= bit;
 				h ^= bit;
@@ -791,8 +815,8 @@ int main()
 	};
 
 	HumanPlayer H;
-	AIPlayer p1(7, evaluate_cont_layer_intersection);
-	AIPlayer p2(7, evaluate_cont_layer_intersection);
+	AIPlayer p1(10, evaluate_cont_layer_intersection);
+	AIPlayer p2(10, evaluate_cont_layer_intersection);
 	//p2.set_random(10);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
 	game.game();

@@ -11,8 +11,8 @@
 
 using namespace std;
 
-//mt19937 rng(random_device{}());
-mt19937 rng;
+mt19937 rng(random_device{}());
+//mt19937 rng;
 enum Cell{None, Me, You};
 enum State{Continue, End, Invalid};
 enum Color{Draw, Black, White};
@@ -32,7 +32,8 @@ static const unsigned long long move_order[] = {
 	BIT(0, 0, 0) | BIT(0, 3, 0) | BIT(3, 0, 0) | BIT(3, 3, 0) |
 	BIT(1, 1, 1) | BIT(1, 2, 1) | BIT(2, 1, 1) | BIT(2, 2, 1) |
 	BIT(1, 1, 2) | BIT(1, 2, 2) | BIT(2, 1, 2) | BIT(2, 2, 2) |
-	BIT(0, 0, 3) | BIT(0, 3, 3) | BIT(3, 0, 3) | BIT(3, 3, 3),// first
+	BIT(0, 0, 3) | BIT(0, 3, 3) | BIT(3, 0, 3) | BIT(3, 3, 3),// first core + corner
+	0xffffffffffff0000uLL,//second 2-4 layer
 	0xffffffffffffffffuLL,// last
 };
 
@@ -706,18 +707,21 @@ int main()
 	auto evaluate = [](const Board &board) -> int
 	{
 		int sum = 0;
-		for (int v : board.count()) sum += v;
+		static const int weight[9] = {0,-60,-56,-16,0,16,56,60,0};
+		for (int v : board.count()) sum += weight[v + 4];
 		return sum;
 	};
 	auto continuous = [](unsigned long long rMe, const unsigned long long rYou) -> int
 	{
 		rMe &= ~(rYou << SIZE * SIZE);
-		return __builtin_popcountll(rMe & rMe << SIZE * SIZE) * 100;
+		return __builtin_popcountll(rMe & rMe << SIZE * SIZE) * 10000;
 	};
 	auto reach_layer = [&](const enum Color now, unsigned long long rMe, unsigned long long rYou, const unsigned long long hand) -> int
 	{
-		rMe &= ~hand;
-		rYou &= ~hand;
+		const unsigned long long rMe_tmp = rMe & ~(hand | rYou << SIZE * SIZE);
+		const unsigned long long rYou_tmp = rYou & ~(hand | rMe << SIZE * SIZE);
+		rMe = rMe_tmp, rYou = rYou_tmp;
+
 		static const unsigned long long mask_2 = 0x00000000ffff0000uLL;
 		static const unsigned long long mask_3 = 0x0000ffff00000000uLL;
 		static const unsigned long long mask_4 = 0xffff000000000000uLL;
@@ -730,14 +734,14 @@ int main()
 		if (now == Color::Black)
 		{//first (black) player
 			{//Me, first (black) player
-				sum += __builtin_popcountll(rMe & mask_2) * 1;//2nd layer
-				sum += __builtin_popcountll(rMe & mask_3) * 3;//3rd layer
-				sum += __builtin_popcountll(rMe & mask_4) * 2;//4th layer
+				sum += __builtin_popcountll(rMe & mask_2) * 30;//2nd layer
+				sum += __builtin_popcountll(rMe & mask_3) * 140;//3rd layer
+				sum += __builtin_popcountll(rMe & mask_4) * 11;//4th layer
 			}
 			{//You, second (white) player
-				sum -= __builtin_popcountll(rYou & mask_2) * 4;//2nd layer
-				sum -= __builtin_popcountll(rYou & mask_3) * 2;//3rd layer
-				sum -= __builtin_popcountll(rYou & mask_4) * 1;//4th layer
+				sum -= __builtin_popcountll(rYou & mask_2) * 64;//2nd layer
+				sum -= __builtin_popcountll(rYou & mask_3) * 200;//3rd layer
+				sum -= __builtin_popcountll(rYou & mask_4) * 16;//4th layer
 			}
 			if (intersection_3)
 			{//if there exists intersections of reaches on 3rd layer
@@ -747,21 +751,21 @@ int main()
 				}
 				else
 				{//even, white = You
-					sum -= 100;
+					sum -= 150;
 				}
 			}
 		}
 		else
 		{//second (white) player
 			{//Me, second (white) player
-				sum += __builtin_popcountll(rMe & mask_2) * 4;//2nd layer
-				sum += __builtin_popcountll(rMe & mask_3) * 1;//3rd layer
-				sum += __builtin_popcountll(rMe & mask_4) * 2;//4th layer
+				sum += __builtin_popcountll(rMe & mask_2) * 48;//2nd layer
+				sum += __builtin_popcountll(rMe & mask_3) * 140;//3rd layer
+				sum += __builtin_popcountll(rMe & mask_4) * 11;//4th layer
 			}
 			{//You, first (black) player
-				sum -= __builtin_popcountll(rYou & mask_2) * 2;//2nd layer
-				sum -= __builtin_popcountll(rYou & mask_3) * 3;//3rd layer
-				sum -= __builtin_popcountll(rYou & mask_4) * 1;//4th layer
+				sum -= __builtin_popcountll(rYou & mask_2) * 64;//2nd layer
+				sum -= __builtin_popcountll(rYou & mask_3) * 200;//3rd layer
+				sum -= __builtin_popcountll(rYou & mask_4) * 16;//4th layer
 			}
 			if (intersection_3)
 			{//if there exists intersections of reaches on 3rd layer
@@ -771,27 +775,13 @@ int main()
 				}
 				else
 				{//even, white = Me
-					sum += 100;
+					sum += 140;
 				}
 			}
 		}
 		return sum;
 	};
-	auto evaluate_cont = [&](const Board &board) -> int
-	{
-		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
-		const unsigned long long rYou = Board::reach(board.You) & ~board.Me;
-		return evaluate(board) + continuous(rMe, rYou) - continuous(rYou, rMe);
-	};
-	auto evaluate_layer = [&](const Board &board) -> int
-	{
-		const enum Color now = board.player();
-		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
-		const unsigned long long rYou = Board::reach(board.You) & ~board.Me;
-		const unsigned long long hand = board.valid_move();
-		return evaluate(board) + reach_layer(now, rMe, rYou, hand);
-	};
-	auto evaluate_cont_layer = [&](const Board &board) -> int
+	auto evaluate_cont_layer_intersection = [&](const Board &board) -> int
 	{
 		const enum Color now = board.player();
 		const unsigned long long rMe = Board::reach(board.Me) & ~board.You;
@@ -801,14 +791,14 @@ int main()
 	};
 
 	HumanPlayer H;
-	AIPlayer p1(4, evaluate_cont_layer);
-	AIPlayer p2(4, evaluate_cont_layer);
-	p2.set_random(20);
+	AIPlayer p1(7, evaluate_cont_layer_intersection);
+	AIPlayer p2(7, evaluate_cont_layer_intersection);
+	//p2.set_random(10);
 	Game game(&p1, &p2, true, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});
 	game.game();
 	return 0;
 	int cnt[3] = {};
-	for (int t = 1; ; t++)
+	for (int t = 1; t <= 5000; t++)
 	{
 		cout << "Game #" << t << endl;
 		Game game(&p1, &p2, false, {{0, 0}, {3, 3}, {0, 3}, {3, 0}});

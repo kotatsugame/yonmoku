@@ -428,7 +428,7 @@ struct AIPlayer : Player
 	F evaluate_func;
 	AIPlayer(int level, F evaluate_func) : level(level), evaluate_func(evaluate_func) { assert(level >= 1); }
 
-	int evaluate_board(Board board, int level, int alpha, int beta, unordered_map<Board, int> &memo)
+	int evaluate_board(Board board, int level, int alpha, int beta)
 	{
 		unsigned long long hand = board.valid_move();
 		if (!hand) return 0;
@@ -447,8 +447,6 @@ struct AIPlayer : Player
 			}
 		}
 
-		if (memo.find(board) != memo.end()) return memo[board];
-
 		for (const unsigned long long mask: move_order)
 		{
 			unsigned long long h = hand & mask;
@@ -459,14 +457,14 @@ struct AIPlayer : Player
 				Board b = board;
 				enum State r = b.place_fast(bit);
 				assert(r == State::Continue);
-				int ev = -evaluate_board(b, level - 1, -beta, -alpha, memo);
+				int ev = -evaluate_board(b, level - 1, -beta, -alpha);
 				alpha = max(alpha, ev);
 				if (alpha >= beta) break;
 				h ^= bit;
 			}
 			if (alpha >= beta) break;
 		}
-		return memo[board] = alpha;
+		return alpha;
 	}
 
 	pair<int, int> move(Board board) override
@@ -492,7 +490,6 @@ struct AIPlayer : Player
 		unsigned long long mv = 0uLL;
 		int mx = -INF;
 
-		unordered_map<Board, int> memo;
 		for (const unsigned long long mask: move_order)
 		{
 			unsigned long long h = hand & mask;
@@ -503,15 +500,13 @@ struct AIPlayer : Player
 				Board b = board;
 				enum State r = b.place_fast(bit);
 				assert(r == State::Continue);
-				int ev = -evaluate_board(b, level - 1, -INF, -mx + 1, memo);
+				int ev = -evaluate_board(b, level - 1, -INF, -mx + 1);
 				if (mx < ev) mv = 0uLL, mx = ev;
 				if (mx == ev) mv |= bit;
 				h ^= bit;
 			}
 		}
 
-		//const int turn = board.turn();// turn number (the number of stones = turn - 1)
-		//auto[mv, ev] = read_DFS(board, turn >= 40 ? level : level, evaluate_func);
 		enum Color now = board.validate();
 		if (verbose)
 		{
